@@ -2,8 +2,6 @@
 
 **A desktop application that records video and, at the same time, builds an independently verifiable, cryptographically signed record of that recording's integrity.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
 Project Crygan makes it possible to later answer two questions with strong technical evidence: *has this specific video file been altered since it was recorded*, and *if so, exactly which parts of it changed*.
 
 It combines several well-established cryptographic and forensic techniques into a single layered pipeline: a rolling SHA-256 hash chain over every recorded frame, a Merkle tree for pinpointing altered frames, perceptual hashing to distinguish harmless re-encoding from genuine visual tampering, ECDSA digital signatures, AES-256-GCM encryption of evidence metadata, RFC 3161 trusted timestamping, and four independent, redundant storage mechanisms for the resulting evidence package.
@@ -24,7 +22,6 @@ It combines several well-established cryptographic and forensic techniques into 
 - [Testing](#testing)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
-- [License](#license)
 
 ---
 
@@ -164,7 +161,3 @@ The project report documents functional test coverage across unmodified recordin
 ## Contributing
 
 Issues and pull requests are welcome. Please keep the five-file module boundary and one-directional import structure (`config` → `evidence_storage` → `crypto_core` → `project_UI`) intact when contributing.
-
-## License
-
-Released under the [MIT License](LICENSE).
