@@ -1,0 +1,32 @@
+# Project Crygan -- dependencies
+#
+# Required:
+PySide6>=6.5
+cryptography>=41.0
+opencv-python>=4.8
+requests>=2.31
+reportlab>=4.0
+numpy>=1.24
+
+# Optional -- enables Reed-Solomon erasure-coded chunk reference frames
+# (steganography.py: erasure_encode/erasure_decode). Without this, videos
+# still record and verify normally; only the extra resilience against a
+# corrupted/truncated primary evidence payload is unavailable.
+reedsolo>=1.7
+
+# Optional -- enables RFC 3161 trusted timestamping of the final frame hash
+# chain against a public Time-Stamp Authority (crypto_core.py:
+# request_trusted_timestamp/verify_trusted_timestamp). Without this,
+# recording and verification still work exactly as before; only the extra
+# independently-attested "this hash existed by time T" evidence is
+# unavailable, and it's silently skipped.
+rfc3161ng>=2.1
+
+# Optional -- enables precise Windows Location Services (location.py)
+# instead of falling back to approximate IP-based geolocation. Windows only.
+winsdk>=1.0; sys_platform == "win32"
+
+# Optional -- enables real camera device names (e.g. "Iriun Webcam" vs
+# "Integrated Webcam") in the camera picker instead of generic "Camera N"
+# labels (recorder.py's list_available_cameras_with_names). Windows only.
+pygrabber>=0.2; sys_platform == "win32"
