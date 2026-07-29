@@ -1,163 +1,976 @@
-# Project Crygan
+<div align="center">
 
-**A desktop application that records video and, at the same time, builds an independently verifiable, cryptographically signed record of that recording's integrity.**
+# 🛡️ PROJECT CRYGAN
 
-Project Crygan makes it possible to later answer two questions with strong technical evidence: *has this specific video file been altered since it was recorded*, and *if so, exactly which parts of it changed*.
+### **A Multi-Layer Digital Video Integrity Verification & Tamper Analysis Framework**
 
-It combines several well-established cryptographic and forensic techniques into a single layered pipeline: a rolling SHA-256 hash chain over every recorded frame, a Merkle tree for pinpointing altered frames, perceptual hashing to distinguish harmless re-encoding from genuine visual tampering, ECDSA digital signatures, AES-256-GCM encryption of evidence metadata, RFC 3161 trusted timestamping, and four independent, redundant storage mechanisms for the resulting evidence package.
-
----
-
-## Table of Contents
-
-- [Why](#why)
-- [How It Works](#how-it-works)
-- [Features](#features)
-- [Architecture](#architecture)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Evidence Package Contents](#evidence-package-contents)
-- [What This System Proves — and What It Doesn't](#what-this-system-proves--and-what-it-doesnt)
-- [Known Limitations](#known-limitations)
-- [Testing](#testing)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
+<p align="center">
+An open-source forensic framework for secure video recording, cryptographic evidence generation,
+multi-layer integrity verification, redundant evidence recovery, and comprehensive forensic reporting.
+</p>
 
 ---
 
-## Why
+![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python)
+![OpenCV](https://img.shields.io/badge/OpenCV-Computer%20Vision-green?logo=opencv)
+![PySide6](https://img.shields.io/badge/PySide6-GUI-41CD52?logo=qt)
+![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?logo=sqlite)
+![License](https://img.shields.io/badge/License-MIT-orange)
+![Platform](https://img.shields.io/badge/Platform-Windows-blue)
+![Status](https://img.shields.io/badge/Status-Active-success)
+![Version](https://img.shields.io/badge/Version-1.0-red)
+</div>
 
-Video is easy to fabricate or subtly edit, and easy to distrust as a result. Project Crygan gives a recording a cryptographic paper trail from the moment it's captured: every frame is hashed as it's written, the resulting chain is signed with a private key that never leaves the device, and the signed evidence is packaged and stored in multiple redundant ways so it can survive real-world handling of the file — sharing, copying, even partial corruption — without silently losing its provenance.
+---
 
-## How It Works
+# 📖 Overview
 
-1. **Record.** As each frame is captured, it's fed into a rolling SHA-256 hash chain and, separately, into a Merkle tree of per-frame hashes. A 64-bit perceptual hash (dHash) is also computed per frame.
-2. **Seal.** When recording stops, the final chain hash, Merkle root, camera/location/timestamp metadata, and the recorder's public key are assembled into a canonical JSON record and signed with an ECDSA (SECP384R1) private key.
-3. **Encrypt & package.** The signed record is encrypted with AES-256-GCM (key derived via PBKDF2-HMAC-SHA256) and optionally timestamped by a public RFC 3161 Time-Stamp Authority.
-4. **Store, redundantly.** The encrypted package is embedded directly in the video file (tail-appended plus an ISO-BMFF `uuid` box), mirrored to a companion `.crygan` sidecar file, summarized into a single-frame LSB steganographic reference PNG, and split into Reed–Solomon erasure-coded chunks spread across additional reference PNGs — plus a local perceptual-hash fingerprint kept in the app's own database as a last-resort fallback.
-5. **Verify.** Given a video (and whichever of the above artifacts are available), the app recomputes the hash chain and Merkle tree from the file, checks the signature, cross-checks any embedded/companion/reference evidence, and — if the exact hashes don't match — uses perceptual hashing to classify each differing frame as *likely re-encoding* or *likely genuine content change*.
+**Project Crygan** is a digital forensic framework designed to preserve the authenticity and integrity of recorded video evidence through a **multi-layer cryptographic verification architecture**.
 
-## Features
+Unlike traditional video recorders that merely capture footage, Project Crygan continuously generates forensic metadata during recording, cryptographically protects it, stores it redundantly across multiple evidence layers, and later verifies the authenticity of a submitted recording while providing a detailed forensic integrity report.
 
-- **Tamper-evident recording** via a chained SHA-256 hash over every frame, sealed at the end of recording.
-- **Frame-level tamper localization** using a Merkle tree, so verification can report *which* frames differ instead of just "integrity check failed."
-- **Perceptual-hash classification (dHash)** to distinguish ordinary lossy re-encoding from an actual visual content change.
-- **ECDSA (SECP384R1) signing** of all evidence metadata, with the private key encrypted at rest (AES-256-GCM, PBKDF2-derived key).
-- **RFC 3161 trusted timestamping** against a public Time-Stamp Authority, independent of the recording device's own clock.
-- **Four redundant, independent evidence storage mechanisms:**
-  - Tail-appended payload embedded directly in the video file (plus an ISO-BMFF `uuid` box) — survives copying/sharing but not transcoding.
-  - Portable companion `.crygan` sidecar file.
-  - Single-frame LSB steganographic reference PNG (hash + signature only).
-  - Reed–Solomon erasure-coded chunk reference PNGs — any subset of `STEGO_CHUNK_DATA_COUNT` out of the total chunks reconstructs the full package.
-- **Local perceptual-hash registry** as an out-of-band fallback: if a video has no extractable embedded evidence at all (e.g. after transcoding), verification can fall back to fingerprint-matching it against this device's own recording history.
-- **One-click evidence export**, bundling the video, companion file, LSB reference, chunk PNGs, and a manifest into a single self-contained folder.
-- **PDF evidence reports** summarizing a verification run.
-- **Approximate location tagging** (precise Windows Location Services when available, IP-based geolocation otherwise).
-- **Light/dark/system theming**, background-threaded recording and verification so the UI never blocks.
+The framework is designed for environments where digital video authenticity is critical, including:
 
-## Architecture
+- Digital Forensics
+- Law Enforcement
+- Incident Documentation
+- Legal Evidence Preservation
+- Research
+- Academic Demonstrations
+- Enterprise Compliance
+- Chain-of-Custody Verification
 
-The project intentionally lives in five files:
+---
 
-| File | Responsibility |
-|---|---|
-| `main.py` | Application bootstrap only. |
-| `config.py` | Shared constants, filesystem paths, and tunable parameters. No dependencies on the other modules. |
-| `crypto_core.py` | All cryptography: SHA-256/Merkle hashing, AES-256-GCM, ECDSA key management and signing, perceptual hashing, RFC 3161 timestamping, and the end-to-end verification pipeline (`VerificationEngine`). |
-| `evidence_storage.py` | Storage and recovery of the encrypted evidence package across all four mechanisms described above, plus payload validation. |
-| `project_UI.py` | Every GUI screen (record / verify / reports / settings) and their supporting logic: theming, the local SQLite evidence index, geolocation, camera capture orchestration, session state, and PDF report generation. |
+# ✨ Key Highlights
 
-Imports flow one direction only — `config.py` → `evidence_storage.py` → `crypto_core.py` → `project_UI.py` — so there is no circular dependency between them.
+✔ Secure video recording
+
+✔ Automatic evidence generation
+
+✔ SHA-256 frame hash chaining
+
+✔ Merkle Tree frame commitment
+
+✔ AES-256-GCM encrypted evidence package
+
+✔ ECDSA digital signatures
+
+✔ RFC 3161 trusted timestamp integration
+
+✔ Multi-layer redundant evidence storage
+
+✔ Reed–Solomon based evidence recovery
+
+✔ Companion `.crygan` evidence package
+
+✔ LSB reference PNG generation
+
+✔ Evidence export bundles
+
+✔ UUID-based evidence discovery
+
+✔ Multi-layer integrity verification
+
+✔ Tamper localization
+
+✔ Re-encoding vs visual modification classification
+
+✔ Human-readable forensic verification reports
+
+---
+
+# 🎯 Project Objectives
+
+Project Crygan aims to solve one of the biggest challenges in digital forensics:
+
+> **"How can we prove that a video has not been altered after recording?"**
+
+The framework addresses this problem by:
+
+- Cryptographically protecting recorded evidence
+- Detecting modifications made after recording
+- Identifying altered frame regions
+- Distinguishing re-encoding from probable visual modification
+- Preserving evidence through redundant storage mechanisms
+- Supporting independent forensic verification
+
+---
+
+# 🚀 Core Features
+
+| Feature | Description |
+|----------|-------------|
+| 🎥 Secure Recording | Captures video while generating forensic metadata |
+| 🔐 AES-256 Encryption | Protects evidence package using authenticated encryption |
+| ✍️ Digital Signature | ECDSA signatures ensure evidence authenticity |
+| 🔗 Frame Hash Chain | Detects inserted, removed, or modified frames |
+| 🌳 Merkle Tree | Localizes frame-level integrity differences |
+| 🧠 Perceptual Hash Analysis | Helps distinguish recompression from probable visual edits |
+| 🕒 Trusted Timestamp | RFC 3161 timestamp for independent temporal proof |
+| 📦 Companion Evidence Package | Portable `.crygan` forensic evidence file |
+| 🖼️ LSB Reference PNG | Independent corroborative integrity reference |
+| 🧩 Reed–Solomon Recovery | Evidence reconstruction from distributed PNG chunks |
+| 🗃 SQLite Registry | Local evidence discovery and recovery support |
+| 📑 PDF Verification Reports | Detailed forensic verification summaries |
+| 📤 Evidence Export | Portable investigation bundles |
+
+---
+
+# 🏗 System Architecture
+
+Project Crygan follows a layered modular architecture.
 
 ```
-project-crygan/
-├── main.py
-├── config.py
-├── crypto_core.py
-├── evidence_storage.py
-├── project_UI.py
+                User Interface
+                     │
+                     ▼
+          Recording / Verification
+                     │
+                     ▼
+           Cryptographic Engine
+                     │
+                     ▼
+      Multi-Layer Evidence Storage
+                     │
+                     ▼
+          Verification Engine
+                     │
+                     ▼
+          Forensic Report Generator
+```
+
+The system separates recording, cryptography, evidence storage, verification, and reporting into independent modules, making the framework extensible and maintainable.
+
+---
+
+# 📂 Repository Structure
+
+```text
+PROJECT-CRYGAN/
+│
+├── config.py                 # Global configuration and constants
+├── crypto_core.py            # Cryptographic operations
+├── evidence_storage.py       # Evidence packaging & storage
+├── project_UI.py             # PySide6 graphical interface
+├── main.py                   # Application entry point
 ├── requirements.txt
-├── videos/            (created at runtime)
-├── keys/              (created at runtime)
-├── reports/           (created at runtime)
-├── stego_refs/        (created at runtime)
-└── evidence_exports/  (created at runtime)
 ```
 
-> **Note on data location:** by design, all persistent data (keys, database, videos, reports) lives in ordinary sub-folders next to the application itself, rather than an OS-level app-data directory — so it's easy to browse to directly. This is documented in `config.py` as something that will need to change if the app is ever packaged as a frozen executable.
+---
 
-## Installation
+# ⚙ Technology Stack
 
-**Requirements:** Python 3.9+
+| Category | Technologies |
+|----------|--------------|
+| Programming Language | Python 3.10+ |
+| GUI Framework | PySide6 |
+| Computer Vision | OpenCV |
+| Cryptography | cryptography |
+| Image Processing | Pillow |
+| Numerical Computing | NumPy |
+| Database | SQLite3 |
+| Error Correction | Reed–Solomon |
+| Hashing | SHA-256 |
+| Encryption | AES-256-GCM |
+| Digital Signature | ECDSA (SECP384R1) |
+| Timestamping | RFC 3161 TSA |
+| Packaging | JSON + Binary Evidence Package |
+
+---
+
+# 🔐 Cryptographic Design
+
+Project Crygan combines multiple cryptographic primitives to provide layered integrity guarantees.
+
+| Primitive | Purpose |
+|-----------|----------|
+| SHA-256 | Frame hash chain generation |
+| Merkle Tree | Frame commitment & localization |
+| AES-256-GCM | Evidence package encryption |
+| PBKDF2 | Encryption key derivation |
+| ECDSA (SECP384R1) | Digital signature generation |
+| RFC 3161 | Trusted timestamping |
+| UUID | Evidence identification |
+
+Each primitive contributes a specific role, creating multiple independent layers of evidence verification instead of relying on a single integrity mechanism.
+
+---
+
+# 🖥 Supported Platform
+
+| Platform | Status |
+|-----------|--------|
+| Windows | ✅ Fully Supported |
+| Linux | ⚠ Experimental |
+| macOS | ⚠ Experimental |
+
+---
+
+# 📥 Installation
+
+Clone the repository:
 
 ```bash
-git clone https://github.com/<your-org>/project-crygan.git
-cd project-crygan
+git clone https://github.com/Neo-Unknown/PROJECT-CRYGAN.git
+
+cd PROJECT-CRYGAN
+```
+
+Create a virtual environment (recommended):
+
+```bash
+python -m venv venv
+```
+
+Activate it.
+
+Windows
+
+```bash
+venv\Scripts\activate
+```
+
+Linux/macOS
+
+```bash
+source venv/bin/activate
+```
+
+Install dependencies
+
+```bash
 pip install -r requirements.txt
+```
+
+---
+
+# ▶ Running Project Crygan
+
+Launch the application:
+
+```bash
 python main.py
 ```
 
-### Dependencies
+The graphical interface will allow you to:
 
-Required: `PySide6`, `cryptography`, `opencv-python`, `requests`, `reportlab`, `numpy`.
+- Record secure videos
+- Verify recorded evidence
+- Export evidence bundles
+- Generate forensic reports
+- Manage application settings
 
-Optional (the app runs fine without these — only the specific feature listed is unavailable):
+---
 
-| Package | Enables | Without it |
-|---|---|---|
-| `reedsolo` | Reed-Solomon erasure-coded chunk reference frames | Videos still record/verify normally; extra resilience against a corrupted primary payload is unavailable |
-| `rfc3161ng` | RFC 3161 trusted timestamping | Recording/verification work exactly as before; the independent "hash existed by time T" attestation is silently skipped |
-| `winsdk` (Windows only) | Precise Windows Location Services | Falls back to approximate IP-based geolocation |
-| `pygrabber` (Windows only) | Real camera device names in the camera picker | Generic "Camera N" labels are used instead |
+# 🔄 Complete Project Workflow
 
-## Usage
+Project Crygan follows a complete forensic evidence lifecycle beginning from secure video acquisition and ending with comprehensive integrity verification and forensic reporting.
 
-1. Launch the app with `python main.py`.
-2. **Record Video** — select a camera, start recording. On stop, the evidence pipeline runs automatically: hashing, signing, encryption, and storage across all available mechanisms.
-3. **Verify Video** — select a video (and, optionally, a passphrase and any recovered reference artifacts) to run the full verification pipeline and see the result, including frame-level tamper localization if the hashes don't match.
-4. **Evidence Reports** — browse past recordings and verification runs, and export a PDF report.
-5. **Settings** — set/change the private key's protection password, toggle light/dark/system theme, and manage the optional "remember my password" convenience feature.
+```text
+                    Record Video
+                         │
+                         ▼
+            Generate Frame Integrity Data
+                         │
+                         ▼
+          Build Cryptographic Evidence Package
+                         │
+                         ▼
+             Encrypt & Digitally Sign Evidence
+                         │
+                         ▼
+          Store Across Multiple Evidence Layers
+                         │
+                         ▼
+             Export Portable Evidence Bundle
+                         │
+                         ▼
+                 Later Verification
+                         │
+                         ▼
+              Multi-Layer Evidence Recovery
+                         │
+                         ▼
+           Multi-Layer Integrity Verification
+                         │
+                         ▼
+              Comprehensive Forensic Report
+```
+
+This layered approach ensures that evidence remains recoverable, verifiable, and resistant to accidental loss or deliberate tampering.
+
+---
+
+# 🎥 Secure Video Recording Workflow
+
+When recording begins, Project Crygan continuously captures video frames while simultaneously generating forensic metadata required for future verification.
+
+Unlike conventional video recorders, the application performs cryptographic operations during and immediately after recording.
+
+## Recording Pipeline
+
+```text
+Location Acquisition
+        │
+        ▼
+Start Camera
+        │
+        ▼
+Capture Frames
+        │
+        ▼
+Generate SHA-256 Frame Hashes
+        │
+        ▼
+Build Merkle Tree
+        │
+        ▼
+Generate Perceptual Hashes
+        │
+        ▼
+Acquire RFC3161 Timestamp
+        │
+        ▼
+Create Evidence Package
+        │
+        ▼
+Digitally Sign
+        │
+        ▼
+Encrypt
+        │
+        ▼
+Store Across Multiple Layers
+```
+
+---
+
+# 📦 Evidence Package
+
+Project Crygan creates a single encrypted forensic evidence package for every recording.
+
+This package becomes the authoritative source used during future verification.
+
+The package contains forensic metadata rather than the video itself.
 
 ## Evidence Package Contents
 
-Before any storage mechanism is applied, each recording assembles a single structured record, serialized to canonical JSON and signed:
+| Component | Purpose |
+|------------|---------|
+| UUID | Unique recording identifier |
+| Recording Timestamp | Recording time |
+| Recording Location | GPS/IP based location |
+| Camera Information | Device metadata |
+| Frame Count | Total recorded frames |
+| SHA-256 Hash Chain | Frame integrity |
+| Final Hash | Recording fingerprint |
+| Merkle Root | Frame commitment |
+| Perceptual Hashes | Visual similarity analysis |
+| RFC3161 Timestamp Token | Trusted temporal proof |
+| Digital Signature | Evidence authenticity |
 
-- Application version, for long-term format compatibility.
-- Location block (coordinates, resolved city/country, accuracy, source).
-- Timestamp block (local time, UTC offset, full UTC start time).
-- Frame hash chain block (algorithm, frame count, final chained hash, Merkle root, per-frame leaf hashes).
-- Perceptual hash block (dHash algorithm + per-frame hashes), when available.
-- Camera metadata.
-- RFC 3161 timestamp block (TSA URL, algorithm, token), when a TSA was reachable.
-- ECDSA signature over the canonical JSON of all of the above.
-- The signer's public key (PEM), so a verifier never needs a separate keystore.
+After creation, the package is digitally signed and encrypted before storage.
 
-This structure is what gets encrypted (AES-256-GCM) before being written through the four storage mechanisms.
+---
 
-## What This System Proves — and What It Doesn't
+# 🔐 Cryptographic Workflow
 
-Project Crygan can show that a specific video's frame data matches what was originally hashed and signed at record time, that the signing key was under this app's control, and — independently — that the resulting hash existed by a certain time according to a third-party clock. It can also localize *which* frames changed if verification fails.
+Project Crygan combines multiple cryptographic mechanisms to protect evidence.
 
-It is **not** a hardware root of trust: it cannot prove what was physically in front of the camera, and it cannot prevent a sufficiently motivated attacker with access to the recording device itself from producing a convincingly signed but staged video. See `crypto_core.py` and the project report for the full threat model and cryptographic primitives used.
+```text
+Evidence Metadata
+        │
+        ▼
+Generate SHA-256 Hash Chain
+        │
+        ▼
+Generate Merkle Root
+        │
+        ▼
+Generate Perceptual Hashes
+        │
+        ▼
+Attach Timestamp
+        │
+        ▼
+ECDSA Signature
+        │
+        ▼
+AES-256-GCM Encryption
+        │
+        ▼
+Encrypted Evidence Package
+```
 
-## Known Limitations
+Each stage protects a different aspect of the recording.
 
-- Embedded/companion evidence does not survive re-encoding or transcoding of the video — this is structural, since transcoding rewrites the file's bytes from scratch. The local perceptual-hash registry exists specifically as a fallback for this case.
-- Perceptual hashing provides *corroborating*, not cryptographic, evidence when classifying a mismatch as "re-encoded" vs. "altered."
-- RFC 3161 verification trusts whatever signing certificate the TSA embeds in its response by default; it does not chain-verify to a trusted root CA unless a certificate is pinned via `TSA_CA_CERT_PATH`.
-- The optional "remember my password" feature stores the session password locally, encrypted with a key that is itself stored unencrypted on disk — a deliberate convenience/security trade-off, disabled by default.
-- No hardware root of trust; see above.
+---
 
-## Testing
+# 🗂 Multi-Layer Evidence Storage
 
-The project report documents functional test coverage across unmodified recordings, trimmed video, visual (exposure/saturation) tampering, and tampering of a secondary evidence artifact (the LSB reference PNG) — confirming the system reliably distinguishes authentic recordings from altered ones, localizes altered frame indices, and degrades gracefully when individual evidence artifacts are lost, without ever falsely validating a tampered recording.
+One of Project Crygan's distinguishing characteristics is that evidence is never stored in a single location.
 
-## Roadmap
+Instead, identical evidence is preserved using multiple independent storage mechanisms.
 
-- Genuine frame-level (bitstream) steganography as an alternative to the current tail-appended embedding technique, without changing the calling code in `evidence_storage.py`'s public API.
-- OS-level app-data directory support for packaged/frozen builds.
-- Hardware-backed key storage.
+## Storage Architecture
 
-## Contributing
+```text
+Encrypted Evidence Package
+        │
+        ├────────────► Embedded MP4 Evidence
+        │
+        ├────────────► Companion .crygan Package
+        │
+        ├────────────► LSB Reference PNG
+        │
+        ├────────────► Reed–Solomon PNG Chunks
+        │
+        └────────────► Local Evidence Registry
+```
 
-Issues and pull requests are welcome. Please keep the five-file module boundary and one-directional import structure (`config` → `evidence_storage` → `crypto_core` → `project_UI`) intact when contributing.
+---
+
+## Evidence Storage Layers
+
+| Storage Layer | Purpose |
+|---------------|---------|
+| Embedded MP4 Evidence | Primary evidence stored inside recorded video |
+| Companion `.crygan` Package | Portable encrypted backup |
+| LSB Reference PNG | Independent corroborative integrity reference |
+| Reed–Solomon PNG Chunks | Recovery when primary package is unavailable |
+| SQLite Registry | Local evidence indexing and discovery |
+
+This redundancy allows verification to continue even if one evidence source becomes unavailable.
+
+---
+
+# 🖼 LSB Reference PNG
+
+Project Crygan generates a PNG containing cryptographic reference information embedded using Least Significant Bit (LSB) steganography.
+
+The PNG contains:
+
+- Final SHA-256 hash
+- Digital signature
+- UUID
+- Integrity reference
+
+The LSB PNG serves as an **independent corroborative evidence source**.
+
+It is **not** the primary evidence package.
+
+If modified or recompressed, the LSB verification will fail while the primary cryptographic verification can still succeed if the embedded or companion evidence package remains intact.
+
+---
+
+# 🧩 Reed–Solomon Recovery
+
+To improve evidence resilience, Project Crygan splits the encrypted evidence package into multiple Reed–Solomon encoded chunks.
+
+```text
+Encrypted Package
+        │
+        ▼
+Split into Data Blocks
+        │
+        ▼
+Generate Parity Blocks
+        │
+        ▼
+Embed Each Block Into PNG
+```
+
+During verification:
+
+```text
+Collect PNG Chunks
+        │
+        ▼
+Enough Chunks Available?
+        │
+     Yes │ No
+        ▼
+Reconstruct Evidence Package
+```
+
+This allows recovery of the encrypted evidence package even when several chunk images are unavailable.
+
+---
+
+# 🗃 Local Evidence Registry
+
+Project Crygan maintains a lightweight SQLite registry containing forensic references for locally recorded evidence.
+
+The registry supports:
+
+- UUID lookup
+- Evidence discovery
+- Recovery assistance
+- Verification history
+- Perceptual fingerprint indexing
+
+The registry is used only after higher-priority evidence sources are unavailable.
+
+---
+
+# 🔍 Evidence Recovery Workflow
+
+When verifying a recording, Project Crygan attempts evidence recovery using a prioritized fallback strategy.
+
+## Recovery Priority
+
+```text
+Embedded MP4 Evidence
+        │
+   Not Found
+        ▼
+Companion .crygan Package
+        │
+   Not Found
+        ▼
+Reed–Solomon PNG Recovery
+        │
+   Not Found
+        ▼
+SQLite Registry
+        │
+   Not Found
+        ▼
+Verification Cannot Proceed
+```
+
+Once evidence has been recovered from any source, all subsequent verification uses that recovered evidence package.
+
+---
+
+# 🛡 Multi-Layer Integrity Verification
+
+Project Crygan performs several independent integrity checks.
+
+## Primary Verification
+
+```text
+Recover Evidence
+        │
+        ▼
+Decrypt Evidence
+        │
+        ▼
+Verify Signature
+        │
+        ▼
+Compare Frame Count
+        │
+        ▼
+Verify SHA-256 Frame Hash Chain
+        │
+        ▼
+Verify Merkle Commitment
+        │
+        ▼
+Primary Integrity Decision
+```
+
+---
+
+## Supporting Verification
+
+Additional forensic evidence is generated through supporting verification mechanisms.
+
+These include:
+
+- RFC3161 Timestamp Verification
+- LSB Reference Validation
+- Perceptual Hash Analysis
+- Frame Localization
+
+These mechanisms provide additional forensic confidence without replacing cryptographic verification.
+
+---
+
+# 🌳 Merkle Tree Verification
+
+The Merkle Tree enables efficient localization of altered frame regions.
+
+Instead of comparing every frame individually, Project Crygan compares the Merkle Root stored in the evidence package against the Merkle Root computed during verification.
+
+If differences exist, the tree traversal identifies affected frame ranges.
+
+---
+
+# 🧠 Perceptual Hash Analysis
+
+Perceptual hashing provides an estimate of visual similarity.
+
+Unlike SHA-256, perceptual hashes remain relatively stable under ordinary compression while changing significantly when visual content changes.
+
+Project Crygan uses perceptual hashing to help distinguish between:
+
+| Scenario | Expected Result |
+|----------|----------------|
+| Ordinary recompression | High similarity |
+| Exposure adjustment | Moderate similarity |
+| Saturation adjustment | Moderate similarity |
+| Cropping | Low similarity |
+| Object removal | Low similarity |
+| Frame replacement | Very low similarity |
+
+Perceptual hashing is used as corroborative evidence and should not be interpreted as cryptographic proof.
+
+---
+
+# 📤 Evidence Export
+
+Project Crygan allows investigators to export all required forensic artifacts as a portable evidence bundle.
+
+Typical exported contents include:
+
+```text
+Recording.mp4
+Recording.crygan
+Reference.png
+...
+manifest.json
+```
+
+The exported bundle enables verification on another system without requiring the original recording environment.
+
+---
+
+# 📑 Verification Report
+
+After verification, Project Crygan generates a comprehensive forensic report.
+
+Typical report contents include:
+
+- Evidence source
+- Recording timestamp
+- Recording location
+- Evidence recovery path
+- Metadata decryption status
+- Digital signature status
+- Frame count comparison
+- SHA-256 frame hash verification
+- Merkle verification
+- LSB verification
+- Timestamp verification
+- Tamper localization
+- Perceptual analysis
+- Overall integrity verdict
+
+The report is designed to provide investigators with both cryptographic evidence and human-readable forensic observations.
+
+---
+
+# 🧪 Experimental Evaluation
+
+Project Crygan was evaluated using representative tampering scenarios to assess its ability to preserve evidence integrity, recover forensic metadata, and identify modifications made after recording.
+
+The experiments focused on validating the complete forensic pipeline rather than individual cryptographic primitives.
+
+---
+
+# 📋 Test Summary
+
+| Test Scenario | Embedded Evidence | Companion `.crygan` | LSB PNG | Result |
+|---------------|------------------|---------------------|---------|--------|
+| Original Recording | ✅ | Not Required | ✅ | Integrity Passed |
+| Trimmed Video | ❌ Removed by Editing | ✅ Recovered | ✅ | Integrity Failed |
+| Exposure / Saturation Editing | ❌ Removed by Editing | ✅ Recovered | ✅ | Integrity Failed |
+| LSB PNG Modified | ✅ | Available | ❌ Failed | Integrity Passed |
+
+---
+
+# 📊 Evaluation Results
+
+## ✅ Test 1 — Original Recording
+
+### Objective
+
+Verify an unmodified recording.
+
+### Outcome
+
+- Evidence successfully recovered
+- Metadata decrypted
+- Signature verified
+- Frame hash chain matched
+- Merkle commitment matched
+- LSB reference validated
+- Overall integrity passed
+
+---
+
+## ✂ Test 2 — Trimmed Video
+
+### Objective
+
+Determine whether frame removal can be detected.
+
+### Observations
+
+- Embedded evidence removed during re-encoding
+- Companion `.crygan` recovered successfully
+- Frame count mismatch detected
+- Hash chain mismatch detected
+- Merkle mismatch detected
+- LSB validation succeeded
+
+### Result
+
+❌ Overall Integrity Failed
+
+---
+
+## 🎨 Test 3 — Exposure & Saturation Editing
+
+### Objective
+
+Evaluate detection of visual modifications.
+
+### Observations
+
+- Frame count unchanged
+- Companion package recovered
+- Hash chain mismatch
+- Merkle mismatch
+- Perceptual analysis identified probable visual modifications
+
+### Result
+
+❌ Overall Integrity Failed
+
+---
+
+## 🖼 Test 4 — LSB PNG Tampering
+
+### Objective
+
+Determine whether corruption of the optional PNG affects primary verification.
+
+### Observations
+
+- Embedded evidence recovered
+- Signature verified
+- Hash chain verified
+- Merkle verification succeeded
+- LSB validation failed
+
+### Result
+
+✅ Overall Integrity Passed
+
+This demonstrates that the LSB reference acts as an independent corroborative layer and does not invalidate authentic evidence when modified.
+
+---
+
+# 📈 Feature Comparison
+
+| Capability | Conventional Video | Project Crygan |
+|------------|-------------------|----------------|
+| Video Recording | ✅ | ✅ |
+| Cryptographic Integrity | ❌ | ✅ |
+| Digital Signatures | ❌ | ✅ |
+| Trusted Timestamp | ❌ | ✅ |
+| Frame-Level Verification | ❌ | ✅ |
+| Tamper Localization | ❌ | ✅ |
+| Evidence Recovery | ❌ | ✅ |
+| Portable Evidence Package | ❌ | ✅ |
+| Multi-Layer Storage | ❌ | ✅ |
+| Forensic Reports | ❌ | ✅ |
+
+---
+
+# 📊 Core Functionalities
+
+Project Crygan provides six primary functional modules.
+
+| Module | Description |
+|----------|-------------|
+| 🎥 Secure Recording | Captures video while generating forensic evidence |
+| 📦 Evidence Packaging | Creates encrypted evidence packages |
+| 🗃 Multi-Layer Storage | Stores evidence redundantly |
+| 🔍 Evidence Recovery | Retrieves evidence using prioritized fallback |
+| 🛡 Integrity Verification | Performs cryptographic verification |
+| 📑 Report Generation | Produces human-readable forensic reports |
+
+---
+
+# 🚀 Performance Characteristics
+
+The framework is designed for forensic reliability rather than maximum throughput.
+
+Current characteristics include:
+
+- SHA-256 frame hashing
+- Merkle Tree generation
+- AES-256-GCM encryption
+- ECDSA signing
+- RFC3161 timestamp validation
+- SQLite indexing
+- Reed–Solomon encoding
+
+Although these introduce computational overhead, they significantly strengthen evidence authenticity.
+
+---
+
+# ⚠ Current Limitations
+
+Project Crygan is an academic and research-oriented framework.
+
+Current limitations include:
+
+- Embedded evidence may be removed by video editors.
+- Companion evidence should be preserved.
+- LSB reference is corroborative only.
+- Perceptual hashing is not cryptographic proof.
+- RFC3161 timestamping depends on network availability.
+- Reed–Solomon recovery has limited experimental validation.
+- Current implementation targets desktop environments.
+
+---
+
+# 🛠 Development Roadmap
+
+| Status | Feature |
+|---------|---------|
+| ✅ | Secure Recording |
+| ✅ | Cryptographic Evidence Generation |
+| ✅ | AES-256-GCM Encryption |
+| ✅ | ECDSA Signatures |
+| ✅ | Merkle Tree Verification |
+| ✅ | SHA-256 Hash Chain |
+| ✅ | LSB Reference PNG |
+| ✅ | Companion `.crygan` Package |
+| ✅ | Evidence Export |
+| ✅ | PDF Reports |
+| 🚧 | Reed–Solomon Recovery Validation |
+| 🚧 | Android Support |
+| 🚧 | Deepfake Detection |
+| 🚧 | Cloud Synchronization |
+
+---
+
+# 🤝 Contributing
+
+Contributions are welcome.
+
+You can contribute by:
+
+- Reporting issues
+- Improving documentation
+- Fixing bugs
+- Optimizing performance
+- Extending verification algorithms
+- Improving GUI
+- Adding platform support
+- Implementing future roadmap features
+
+---
+
+## Development Workflow
+
+```bash
+Fork Repository
+
+↓
+
+Create Feature Branch
+
+↓
+
+Commit Changes
+
+↓
+
+Push Branch
+
+↓
+
+Open Pull Request
+```
+
+Please ensure that new contributions include appropriate documentation and testing where applicable.
+
+---
+
+# 🐞 Reporting Issues
+
+If you discover a bug or unexpected behaviour:
+
+1. Search existing issues.
+2. Create a new issue if necessary.
+3. Include:
+   - Operating system
+   - Python version
+   - Steps to reproduce
+   - Screenshots or logs
+   - Expected behaviour
+
+---
+
+# 📄 License
+
+This project is released under the **MIT License**.
+
+You are free to:
+
+- Use
+- Modify
+- Distribute
+- Fork
+
+while retaining the original license.
+
+See the [`LICENSE`](LICENSE) file for the full license text.
+
+---
+
+# 🙏 Acknowledgements
+
+Project Crygan was developed as a research and software engineering project focusing on digital forensics, cryptography, and secure multimedia evidence preservation.
+
+The project builds upon established concepts in:
+
+- SHA-256 Cryptographic Hashing
+- Merkle Trees
+- AES-GCM Encryption
+- ECDSA Digital Signatures
+- RFC 3161 Trusted Timestamping
+- Reed–Solomon Error Correction
+- OpenCV
+- PySide6
+- SQLite
+
+Thanks to the open-source community whose libraries and tools made this project possible.
+
+---
+
+# ⭐ Support the Project
+
+If you find Project Crygan useful:
+
+⭐ Star the repository
+
+🍴 Fork the project
+
+🐛 Report issues
+
+💡 Suggest improvements
+
+📢 Share the project
+
+---
+
+<div align="center">
+
+# 🛡 Project Crygan
+
+### Preserving Digital Evidence Through Multi-Layer Cryptographic Integrity Verification
+
+---
+**Developed by S. Vinay Narasimha & R. Hemanth Kumar**
+
+
+</div>
